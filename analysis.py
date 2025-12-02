@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 import matplotlib.pyplot as plt
+from matplotlib import colors
 import numpy as np
 import os
 import psycopg2
@@ -16,6 +17,8 @@ def main():
     conn = connect_to_db()
     
     review_histogram(conn, "review_histogram")
+    review_heatmap(conn, "review_heatmap_01", review_min=100, review_max=10000)
+    review_heatmap(conn, "review_heatmap_02", review_min=10, review_scale="log")
 
     conn.close()
 
@@ -48,6 +51,48 @@ FROM apps;
     plt.yscale('log')
     plt.suptitle("Distribution of Review Counts")
     plt.savefig(get_full_filename(filename), dpi=600)
+
+
+def review_heatmap(conn, filename, review_min = 0, review_max = -1, review_scale="linear"):
+    query = """
+SELECT 
+    (reviews).total_reviews AS total_reviews,
+    (reviews).percent_positive AS percent_positive
+FROM apps;
+"""
+
+    df = pd.read_sql(query, conn)
+    df = df[df["total_reviews"] >= review_min]
+
+    if (review_max < 0):
+        review_max = df["total_reviews"].max()
+
+    if review_scale=="linear":
+        x_bins = np.linspace(0, review_max, 100)
+    elif review_scale=="log":
+        x_bins = np.logspace(np.log10(review_min), np.log10(review_max), 100)
+    else:
+        raise ValueError("Unknown review_scale")
+
+    y_bins = np.linspace(0, 100, 101)
+
+    plt.figure()
+    plt.hist2d(
+        df["total_reviews"],
+        df["percent_positive"],
+        bins=[x_bins, y_bins],
+        cmap="plasma",
+        norm=colors.LogNorm()
+    )
+    plt.colorbar(label="Number of Games")
+    plt.xlim(review_min, review_max)
+    plt.ylim(1, 100)
+    plt.xscale(review_scale)
+    plt.yscale("linear")
+    plt.xlabel("Review Count")
+    plt.ylabel("Percent Positive")
+    plt.suptitle(f"Steam Reviews\n(only games with review count ≥ {review_min})")
+    plt.savefig(get_full_filename(filename), dpi=300)
 
 
 def connect_to_db():
