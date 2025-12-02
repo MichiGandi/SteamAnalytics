@@ -1,3 +1,4 @@
+import calmap
 from dotenv import load_dotenv
 import matplotlib.pyplot as plt
 from matplotlib import colors
@@ -19,6 +20,8 @@ def main():
     review_histogram(conn, "review_histogram")
     review_heatmap(conn, "review_heatmap_01", review_min=100, review_max=10000)
     review_heatmap(conn, "review_heatmap_02", review_min=10, review_scale="log")
+    release_calmap(conn, "release_calmap_01", range(2010, 2025 + 1))
+    release_calmap(conn, "release_calmap_02", merge_years=True)
 
     conn.close()
 
@@ -92,6 +95,65 @@ FROM apps;
     plt.xlabel("Review Count")
     plt.ylabel("Percent Positive")
     plt.suptitle(f"Steam Reviews\n(only games with review count ≥ {review_min})")
+    plt.savefig(get_full_filename(filename), dpi=300)
+
+
+def release_calmap(conn, filename, years=None, merge_years=False, normalize_years=True, shorten_year_labels=False, force_year_labels=None):
+    query = """
+SELECT release_date FROM apps
+WHERE release_date IS NOT NULL;
+"""
+
+    df = pd.read_sql(query, conn)
+
+    df["release_date"] = pd.to_datetime(df["release_date"])
+    daily_counts = df["release_date"].dt.date.value_counts()
+    daily_counts.index = pd.to_datetime(daily_counts.index)
+    daily_counts = daily_counts.sort_index()
+    
+    today = pd.Timestamp.today().normalize()
+    daily_counts = daily_counts[daily_counts.index <= today]
+
+    if years is None:
+        years = range(daily_counts.index.year.min(), daily_counts.index.year.max() + 1)
+    daily_counts = daily_counts[daily_counts.index.year.isin(years)]
+
+    if merge_years:
+        daily_counts.index = daily_counts.index.map(lambda d: d.replace(year=2000))
+    elif normalize_years:
+        daily_counts_normalized = pd.Series(dtype=float)
+        for year in years:
+            mask = daily_counts.index.year == year
+            year_data = daily_counts[mask]
+            year_data /= year_data.max()
+            daily_counts_normalized = pd.concat([daily_counts_normalized, year_data])
+        daily_counts = daily_counts_normalized
+
+    fig, axes = calmap.calendarplot(
+        daily_counts,
+        fig_kws={"figsize": (plt.rcParams["figure.figsize"][0], 0.5 + 1.2 * daily_counts.index.year.nunique())},
+        #yearlabels=force_year_labels or (not merge_years),
+        yearlabel_kws={"fontsize": 24},
+        dayticks=[0, 6],
+        cmap="plasma",
+        fillcolor="lightgray",
+        #linecolor="purple",
+        linewidth=0.25,
+    )
+
+    if force_year_labels is not None:
+        ax = axes[0].set_ylabel(force_year_labels)
+    elif merge_years:
+        ax = axes[0].set_ylabel(f"{str(years[0])}-{str(years[-1])[-2:]}")
+
+    if shorten_year_labels:
+        for ax in axes.flatten():
+            label = ax.get_ylabel()
+            if label.isdigit():
+                ax.set_ylabel(label[-2:])
+
+    plt.suptitle("Steam Game Releases")
+    plt.tight_layout()
     plt.savefig(get_full_filename(filename), dpi=300)
 
 
