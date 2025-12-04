@@ -2,6 +2,7 @@ import calmap
 from dotenv import load_dotenv
 import matplotlib.pyplot as plt
 from matplotlib import colors
+from matplotlib.ticker import StrMethodFormatter
 import numpy as np
 import os
 import psycopg2
@@ -22,6 +23,8 @@ def main():
     review_heatmap(conn, "review_heatmap_02", review_min=10, review_scale="log")
     release_calmap(conn, "release_calmap_01", range(2010, 2025 + 1))
     release_calmap(conn, "release_calmap_02", merge_years=True)
+    revenue_distribution(conn, "revenue_distribution_01")
+    revenue_distribution(conn, "revenue_distribution_02", 1000000)
 
     conn.close()
 
@@ -153,6 +156,38 @@ WHERE release_date IS NOT NULL;
                 ax.set_ylabel(label[-2:])
 
     plt.suptitle("Steam Game Releases")
+    plt.tight_layout()
+    plt.savefig(get_full_filename(filename), dpi=300)
+
+
+def revenue_distribution(conn, filename, max_revenue=100000):
+    query = """
+SELECT revenue_estimate FROM apps_view
+WHERE price IS NOT NULL
+AND price > 0;
+"""
+
+    df = pd.read_sql(query, conn)
+    revenue_sorted = np.sort(df["revenue_estimate"])
+    x = np.arange(len(revenue_sorted))
+
+    fig, ax = plt.subplots()
+    ax.plot(range(len(revenue_sorted)), revenue_sorted)
+    plt.xscale("linear")
+    plt.yscale("linear")
+    ax.set_xticks(np.percentile(x, np.arange(0, 101, 10)))
+    ax.axvline(np.percentile(x, 50), color='gray', linestyle='-', linewidth=0.8, alpha=0.7)
+    for i in np.linspace(0, 100, 11):
+        if (i == 50):
+            continue
+        ax.axvline(np.percentile(x, i), color='gray', linestyle='--', linewidth=0.8, alpha=0.7)
+    plt.xlim(0, len(df))
+    plt.ylim(0, max_revenue)
+    ax.set_xticklabels([f"{i}%" for i in range(0, 101, 10)])
+    ax.yaxis.set_major_formatter(StrMethodFormatter('${x:,.0f}'))
+    ax.set_xlabel("Number of Games")
+    ax.set_ylabel("Revenue Estimate")
+    plt.suptitle("Revenue Distribution")
     plt.tight_layout()
     plt.savefig(get_full_filename(filename), dpi=300)
 
