@@ -71,20 +71,27 @@ def process_app(item, cur):
 
     developers = item.get("basic_info", {}).get("developers", [])
     developers_array_str = assemble_list([f'"{escape_text(d["name"])}"' for d in developers])
-    
+
     # Insert into PostgreSQL
     sql = """
-    INSERT INTO apps (appid, name, reviews, release_date, tags, publishers, developers)
-    VALUES (
-        %s,
-        %s,
-        ROW(%s,%s,%s)::review_summary,
-        %s,
-        %s::weighted_tag[],
-        %s::text[],
-        %s::text[]
-    )
-    ON CONFLICT (appid) DO NOTHING
+INSERT INTO apps (appid, name, reviews, release_date, tags, publishers, developers)
+VALUES (
+    %s,
+    %s,
+    ROW(%s,%s,%s)::review_summary,
+    %s,
+    %s::weighted_tag[],
+    %s::text[],
+    %s::text[]
+)
+ON CONFLICT (appid) DO UPDATE
+SET
+    name = EXCLUDED.name,
+    reviews = EXCLUDED.reviews,
+    release_date = EXCLUDED.release_date,
+    tags = EXCLUDED.tags,
+    publishers = EXCLUDED.publishers,
+    developers = EXCLUDED.developers;
     """
     cur.execute(sql, (
         appid,
