@@ -1,46 +1,69 @@
 import pandas as pd
 import requests
 from dotenv import load_dotenv
+import json
 import os
 
 load_dotenv()
 
-url = "https://api.steampowered.com/IStoreService/GetAppList/v1/"
-params = {
-    "key": os.getenv("STEAM_WEB_API_KEY"),
-    "include_games": True,
-    "include_dlc": False,
-    "include_software": False,
-    "include_videos": False,
-    "include_hardware": False,
-    "max_results": 50000
-}
+def main():
+    load_app_list()
+    load_tag_list()
 
-params["last_appid"] = 0
-all_apps = []
 
-max_requests = 20
-request_count = 0
-while True:
-    request_count += 1
-    print(f"request: {request_count}...")
-    
+def load_app_list():
+    url = "https://api.steampowered.com/IStoreService/GetAppList/v1/"
+    params = {
+        "key": os.getenv("STEAM_WEB_API_KEY"),
+        "include_games": True,
+        "include_dlc": False,
+        "include_software": False,
+        "include_videos": False,
+        "include_hardware": False,
+        "max_results": 50000
+    }
+
+    params["last_appid"] = 0
+    all_apps = []
+
+    max_requests = 20
+    request_count = 0
+    while True:
+        request_count += 1
+        print(f"request: {request_count}...")
+        
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+
+        data = response.json()
+
+        apps = data.get("response", {}).get("apps", [])
+        all_apps.extend(apps)
+        params["last_appid"] = data.get("response", {}).get("last_appid")
+
+        have_more_results = data.get("response", {}).get("have_more_results")
+        if not have_more_results:
+            break
+
+    print(f"fetched {len(all_apps)} apps.")
+
+    df = pd.DataFrame(all_apps)
+
+    os.makedirs("data", exist_ok=True)
+    df.to_csv("data/all_apps.csv", index=False)
+
+
+def load_tag_list():
+    url = "https://api.steampowered.com/IStoreService/GetTagList/v1/"
+    params = {
+        "language": "english"
+    }
+
     response = requests.get(url, params=params)
     response.raise_for_status()
 
-    data = response.json()
+    os.makedirs("data", exist_ok=True)
+    with open("data/steam_tags.json", "w", encoding="utf-8") as f:
+        json.dump(response.json(), f, indent=2)
 
-    apps = data.get("response", {}).get("apps", [])
-    all_apps.extend(apps)
-    params["last_appid"] = data.get("response", {}).get("last_appid")
-
-    have_more_results = data.get("response", {}).get("have_more_results")
-    if not have_more_results:
-        break
-
-print(f"fetched {len(all_apps)} apps.")
-
-df = pd.DataFrame(all_apps)
-
-os.makedirs("data", exist_ok=True)
-df.to_csv("data/all_apps.csv", index=False)
+main()
