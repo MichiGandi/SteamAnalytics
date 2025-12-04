@@ -21,3 +21,10 @@ CREATE TABLE apps (
     developers TEXT[],
     price numeric
 );
+
+
+CREATE VIEW apps_view AS
+SELECT
+    *,
+    price * (reviews).total_reviews * 24.5 AS revenue_estimate
+FROM apps;
