@@ -18,5 +18,6 @@ CREATE TABLE apps (
     release_date TIMESTAMP,
     tags weighted_tag[],
     publishers TEXT[],
-    developers TEXT[]
+    developers TEXT[],
+    price numeric
 );

@@ -1,5 +1,6 @@
 import json
 import psycopg2
+from decimal import Decimal
 from datetime import datetime
 from dotenv import load_dotenv
 import os
@@ -72,9 +73,13 @@ def process_app(item, cur):
     developers = item.get("basic_info", {}).get("developers", [])
     developers_array_str = assemble_list([f'"{escape_text(d["name"])}"' for d in developers])
 
+    price = item.get("best_purchase_option", {}).get("final_price_in_cents", 0)
+    if price is not None:
+        price = Decimal(price) / Decimal(100)
+
     # Insert into PostgreSQL
     sql = """
-INSERT INTO apps (appid, name, reviews, release_date, tags, publishers, developers)
+INSERT INTO apps (appid, name, reviews, release_date, tags, publishers, developers, price)
 VALUES (
     %s,
     %s,
@@ -82,7 +87,8 @@ VALUES (
     %s,
     %s::weighted_tag[],
     %s::text[],
-    %s::text[]
+    %s::text[],
+    %s
 )
 ON CONFLICT (appid) DO UPDATE
 SET
@@ -91,7 +97,8 @@ SET
     release_date = EXCLUDED.release_date,
     tags = EXCLUDED.tags,
     publishers = EXCLUDED.publishers,
-    developers = EXCLUDED.developers;
+    developers = EXCLUDED.developers,
+    price = EXCLUDED.price;
     """
     cur.execute(sql, (
         appid,
@@ -102,7 +109,8 @@ SET
         release_date,
         tag_array_str,
         publishers_array_str,
-        developers_array_str
+        developers_array_str,
+        price
     ))
 
 
