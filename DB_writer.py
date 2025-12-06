@@ -9,7 +9,118 @@ from tqdm import tqdm
 load_dotenv()
 
 # Settings
-DIRECTORY = "data/storebrowse_items"
+APPS_DIRECTORY = "data/storebrowse_items"
+TAGS_FILE = "data/steam_tags.json"
+
+def main():
+    conn, cur = connect_to_db()
+
+    store_apps(cur)
+    store_tags(cur)
+        
+    conn.commit()
+    cur.close()
+    conn.close()
+    print("All JSON files imported successfully!")
+
+
+def store_apps(cur):
+    json_files = [f for f in os.listdir(APPS_DIRECTORY) if f.endswith(".json")]
+
+    for filename in tqdm(json_files, desc="Processing JSON files"):
+        filepath = os.path.join(APPS_DIRECTORY, filename)
+        with open(filepath, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        for item in data["response"]["store_items"]:
+            process_app(item, cur)
+
+
+def process_app(item, cur):
+    appid = item["appid"]
+    name = item["name"]
+    test = "A"
+    # Reviews (taking summary_filtered)
+    reviews_summary = item.get("reviews", {}).get("summary_filtered", {})
+    total_reviews = reviews_summary.get("review_count", 0)
+    percent_positive = reviews_summary.get("percent_positive", 0)
+    review_score = reviews_summary.get("review_score", 0)
+    
+    # Release date
+    release_timestamp = item.get("release", {}).get("steam_release_date")
+    release_date = datetime.fromtimestamp(release_timestamp) if release_timestamp else None
+    
+    # Tags as weighted_tagid[]
+    tags = item.get("tags", [])
+    tag_array_str = assemble_list([f'({t["tagid"]},{t["weight"]})' for t in tags], True)
+    
+    # Publishers & developers as TEXT[]
+    publishers = item.get("basic_info", {}).get("publishers", [])
+    publishers_array_str = assemble_list([f'"{escape_text(p["name"])}"' for p in publishers])
+
+    developers = item.get("basic_info", {}).get("developers", [])
+    developers_array_str = assemble_list([f'"{escape_text(d["name"])}"' for d in developers])
+
+    price = item.get("best_purchase_option", {}).get("final_price_in_cents", 0)
+    if price is not None:
+        price = Decimal(price) / Decimal(100)
+
+    # Insert into PostgreSQL
+    sql = """
+INSERT INTO apps (appid, name, reviews, release_date, tagids, publishers, developers, price)
+VALUES (
+    %s,
+    %s,
+    ROW(%s,%s,%s)::review_summary,
+    %s,
+    %s::weighted_tagid[],
+    %s::text[],
+    %s::text[],
+    %s
+)
+ON CONFLICT (appid) DO UPDATE
+SET
+    name = EXCLUDED.name,
+    reviews = EXCLUDED.reviews,
+    release_date = EXCLUDED.release_date,
+    tagids = EXCLUDED.tagids,
+    publishers = EXCLUDED.publishers,
+    developers = EXCLUDED.developers,
+    price = EXCLUDED.price;
+"""
+    cur.execute(sql, (
+        appid,
+        name,
+        total_reviews,
+        percent_positive,
+        review_score,
+        release_date,
+        tag_array_str,
+        publishers_array_str,
+        developers_array_str,
+        price
+    ))
+
+
+def store_tags(cur):
+    with open(TAGS_FILE, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    tags = data.get("response", {}).get("tags", [])
+
+    sql = """
+INSERT INTO tags (tagid, tagname)
+VALUES (%s, %s)
+ON CONFLICT (tagid) DO UPDATE
+SET
+    tagname = EXCLUDED.tagname;
+"""
+
+    for tag in tags:
+        tagid = int(tag["tagid"])
+        tagname = tag["name"]
+
+        cur.execute(sql, (tagid, tagname))
 
 
 def connect_to_db():
@@ -26,9 +137,7 @@ def connect_to_db():
     except:
         print("failed to connect to DB.")
         raise
-        
-def escape_text(s):
-    return s.replace('"', '\\"')
+
 
 def assemble_list(items, composite=False):
     """
@@ -48,94 +157,8 @@ def assemble_list(items, composite=False):
     return "{" + ",".join(items) + "}"
 
 
-def process_app(item, cur):
-    appid = item["appid"]
-    name = item["name"]
-    test = "A"
-    # Reviews (taking summary_filtered)
-    reviews_summary = item.get("reviews", {}).get("summary_filtered", {})
-    total_reviews = reviews_summary.get("review_count", 0)
-    percent_positive = reviews_summary.get("percent_positive", 0)
-    review_score = reviews_summary.get("review_score", 0)
-    
-    # Release date
-    release_timestamp = item.get("release", {}).get("steam_release_date")
-    release_date = datetime.fromtimestamp(release_timestamp) if release_timestamp else None
-    
-    # Tags as weighted_tag[]
-    tags = item.get("tags", [])
-    tag_array_str = assemble_list([f'({t["tagid"]},{t["weight"]})' for t in tags], True)
-    
-    # Publishers & developers as TEXT[]
-    publishers = item.get("basic_info", {}).get("publishers", [])
-    publishers_array_str = assemble_list([f'"{escape_text(p["name"])}"' for p in publishers])
-
-    developers = item.get("basic_info", {}).get("developers", [])
-    developers_array_str = assemble_list([f'"{escape_text(d["name"])}"' for d in developers])
-
-    price = item.get("best_purchase_option", {}).get("final_price_in_cents", 0)
-    if price is not None:
-        price = Decimal(price) / Decimal(100)
-
-    # Insert into PostgreSQL
-    sql = """
-INSERT INTO apps (appid, name, reviews, release_date, tags, publishers, developers, price)
-VALUES (
-    %s,
-    %s,
-    ROW(%s,%s,%s)::review_summary,
-    %s,
-    %s::weighted_tag[],
-    %s::text[],
-    %s::text[],
-    %s
-)
-ON CONFLICT (appid) DO UPDATE
-SET
-    name = EXCLUDED.name,
-    reviews = EXCLUDED.reviews,
-    release_date = EXCLUDED.release_date,
-    tags = EXCLUDED.tags,
-    publishers = EXCLUDED.publishers,
-    developers = EXCLUDED.developers,
-    price = EXCLUDED.price;
-    """
-    cur.execute(sql, (
-        appid,
-        name,
-        total_reviews,
-        percent_positive,
-        review_score,
-        release_date,
-        tag_array_str,
-        publishers_array_str,
-        developers_array_str,
-        price
-    ))
-
-
-def process_file(data, cur):
-    for item in data["response"]["store_items"]:
-        process_app(item, cur)
-
-
-def main():
-    conn, cur = connect_to_db()
-
-    json_files = [f for f in os.listdir(DIRECTORY) if f.endswith(".json")]
-
-    for filename in tqdm(json_files, desc="Processing JSON files"):
-        filepath = os.path.join(DIRECTORY, filename)
-        with open(filepath, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        process_file(data, cur)
-            
-            
-
-    conn.commit()
-    cur.close()
-    conn.close()
-    print("All JSON files imported successfully!")
+def escape_text(s):
+    return s.replace('"', '\\"')
 
 
 main()

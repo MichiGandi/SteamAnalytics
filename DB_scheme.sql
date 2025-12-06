@@ -5,26 +5,47 @@ CREATE TYPE review_summary AS (
 );
 
 
-CREATE TYPE weighted_tag AS (
+CREATE TYPE weighted_tagid AS (
     tagid INT,
     weight INT
 );
 
 
-CREATE TABLE apps (
+CREATE TYPE weighted_tagname AS (
+    tagname TEXT,
+    weight INT
+);
+
+
+CREATE TABLE IF NOT EXISTS apps (
     appid INT PRIMARY KEY,
     name TEXT,
     reviews review_summary,
     release_date TIMESTAMP,
-    tags weighted_tag[],
+    tagids weighted_tagid[],
     publishers TEXT[],
     developers TEXT[],
     price numeric
 );
 
 
-CREATE VIEW apps_view AS
+
+CREATE TABLE IF NOT EXISTS tags (
+    tagid INT PRIMARY KEY,
+    tagname TEXT
+);
+
+
+
+CREATE OR REPLACE VIEW apps_view AS
 SELECT
-    *,
-    price * (reviews).total_reviews * 24.5 AS revenue_estimate
-FROM apps;
+    a.*,
+    a.price * (a.reviews).total_reviews * 24.5 AS revenue_estimate,
+    (
+        SELECT array_agg(
+            ROW(t.tagname, wt.weight)::weighted_tagname
+        )
+        FROM unnest(a.tagids) AS wt
+        JOIN tags t ON t.tagid = wt.tagid
+    ) AS tagnames
+FROM apps a;
