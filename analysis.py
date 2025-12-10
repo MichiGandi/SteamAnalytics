@@ -23,8 +23,11 @@ def main():
     review_heatmap(conn, "review_heatmap_02", review_min=10, review_scale="log")
     release_calmap(conn, "release_calmap_01", range(2010, 2025 + 1))
     release_calmap(conn, "release_calmap_02", merge_years=True)
-    revenue_distribution(conn, "revenue_distribution_01")
-    revenue_distribution(conn, "revenue_distribution_02", 1000000)
+    revenue_distribution(conn, "revenue_distribution_01", revenue_scale="linear")
+    revenue_distribution(conn, "revenue_distribution_01_log", revenue_scale="log")
+    revenue_distribution(conn, "revenue_distribution_02", revenue_scale="linear", max_revenue=1000000)
+    revenue_distribution(conn, "revenue_distribution_03", revenue_scale="log", tag_whitelist=[1091588], subtitle="Tag = Roguelike Deckbuilder")
+    revenue_distribution(conn, "revenue_distribution_04", revenue_scale="log", tag_whitelist=[5432], subtitle="Tag = Programming")
 
     conn.close()
 
@@ -160,34 +163,44 @@ WHERE release_date IS NOT NULL;
     plt.savefig(get_full_filename(filename), dpi=300)
 
 
-def revenue_distribution(conn, filename, max_revenue=100000):
-    query = """
+def revenue_distribution(conn, filename,
+                         max_revenue=None,
+                         revenue_scale="linear",
+                         tag_whitelist=None,
+                         tag_blacklist=None,
+                         subtitle=None):
+    query = f"""
 SELECT revenue_estimate FROM apps_view
 WHERE price IS NOT NULL
-AND price > 0;
+AND price > 0
+AND tags_filter(tagids, '{assemble_list(tag_whitelist)}', '{assemble_list(tag_blacklist)}');
 """
 
     df = pd.read_sql(query, conn)
+    print(len(df))
     revenue_sorted = np.sort(df["revenue_estimate"])
     x = np.arange(len(revenue_sorted))
+
+    if max_revenue == None:
+        max_revenue = revenue_sorted[-1]
 
     fig, ax = plt.subplots()
     ax.plot(range(len(revenue_sorted)), revenue_sorted)
     plt.xscale("linear")
-    plt.yscale("linear")
+    plt.yscale(revenue_scale)
     ax.set_xticks(np.percentile(x, np.arange(0, 101, 10)))
     ax.axvline(np.percentile(x, 50), color='gray', linestyle='-', linewidth=0.8, alpha=0.7)
     for i in np.linspace(0, 100, 11):
         if (i == 50):
             continue
         ax.axvline(np.percentile(x, i), color='gray', linestyle='--', linewidth=0.8, alpha=0.7)
-    plt.xlim(0, len(df))
+    plt.xlim(0, len(df) - 1)
     plt.ylim(0, max_revenue)
     ax.set_xticklabels([f"{i}%" for i in range(0, 101, 10)])
     ax.yaxis.set_major_formatter(StrMethodFormatter('${x:,.0f}'))
     ax.set_xlabel("Number of Games")
     ax.set_ylabel("Revenue Estimate")
-    plt.suptitle("Revenue Distribution")
+    plt.suptitle(combine_subtitle("Revenue Distribution", subtitle))
     plt.tight_layout()
     plt.savefig(get_full_filename(filename), dpi=300)
 
@@ -209,5 +222,30 @@ def connect_to_db():
 def get_full_filename(filename):
     return f"{OUTPUT_DIR}/{filename}.{OUTPUT_FORMAT}"
 
+
+def assemble_list(items, composite=False):
+    """
+    Convert a list into a PostgreSQL array string.
+    
+    - composite=True: each item is a composite, wrap in quotes: "(x,y)"
+    - composite=False: plain array elements
+    
+    Examples:
+    assemble_list(['"Valve"', '"Epic"']) -> '{"Valve","Epic"}'
+    assemble_list(['(19,1623)','(1663,1454)'], composite=True) -> {"(19,1623)","(1663,1454)"}
+    """
+    if not items:
+        return "{}"
+    if composite:
+        items = [f'"{item}"' for item in items]
+    else:
+        items = [str(item) for item in items]
+    return "{" + ",".join(items) + "}"
+
+def combine_subtitle(title, subtitle):
+    if not subtitle:
+        return title
+    else:
+        return f"{title}\n({subtitle})"
 
 main()
