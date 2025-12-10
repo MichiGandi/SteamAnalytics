@@ -49,3 +49,40 @@ SELECT
         JOIN tags t ON t.tagid = wt.tagid
     ) AS tagnames
 FROM apps a;
+
+
+CREATE OR REPLACE FUNCTION tags_filter(
+    tagids weighted_tagid[],
+    whitelist int[],
+    blacklist int[]
+)
+RETURNS boolean AS $$
+DECLARE
+    whitelist_count int;
+BEGIN
+    -- If whitelist is provided, ALL whitelist tags must be present
+    IF whitelist IS NOT NULL THEN
+        SELECT COUNT(DISTINCT t.tagid)
+        INTO whitelist_count
+        FROM unnest(tagids) AS t
+        WHERE t.tagid = ANY(whitelist);
+
+        IF whitelist_count <> array_length(whitelist, 1) THEN
+            RETURN false;
+        END IF;
+    END IF;
+
+    -- If whitelist is provided, NONE of these may be present
+    IF blacklist IS NOT NULL THEN
+        IF EXISTS (
+            SELECT 1 
+            FROM unnest(tagids) AS t
+            WHERE t.tagid = ANY(blacklist)
+        ) THEN
+            RETURN false;
+        END IF;
+    END IF;
+
+    RETURN true;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
