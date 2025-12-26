@@ -17,6 +17,17 @@ CREATE TYPE weighted_tagname AS (
 );
 
 
+CREATE TYPE review_author AS (
+    steamid BIGINT,
+    num_games_owned INT,
+    num_reviews INT,
+    playtime_forever INT,
+    playtime_last_two_weeks INT,
+    playtime_at_review INT,
+    last_played TIMESTAMP
+);
+
+
 CREATE TABLE IF NOT EXISTS apps (
     appid INT PRIMARY KEY,
     name TEXT,
@@ -29,12 +40,28 @@ CREATE TABLE IF NOT EXISTS apps (
 );
 
 
-
 CREATE TABLE IF NOT EXISTS tags (
     tagid INT PRIMARY KEY,
     tagname TEXT
 );
 
+
+CREATE TABLE IF NOT EXISTS reviews (
+    recommendationid INT PRIMARY KEY,
+	appid INT,
+    author review_author,
+    review TEXT,
+    timestamp_created TIMESTAMP,
+    timestamp_updated TIMESTAMP,
+    voted_up BOOLEAN,
+    votes_funny BIGINT,
+    weighted_vote_score NUMERIC,
+    comment_count INT,
+    steam_purchase BOOLEAN,
+    received_for_free BOOLEAN,
+    written_during_early_access BOOLEAN,
+    primarily_steam_deck BOOLEAN
+);
 
 
 CREATE OR REPLACE VIEW apps_view AS
