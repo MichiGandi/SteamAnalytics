@@ -3,10 +3,13 @@ from dotenv import load_dotenv
 import matplotlib.pyplot as plt
 from matplotlib import colors
 from matplotlib.ticker import StrMethodFormatter
+import networkx as nx
 import numpy as np
 import os
 import psycopg2
 import pandas as pd
+
+
 
 load_dotenv()
 
@@ -18,16 +21,17 @@ OUTPUT_FORMAT = "png"
 def main():
     conn = connect_to_db()
     
-    review_histogram(conn, "review_histogram")
-    review_heatmap(conn, "review_heatmap_01", review_min=100, review_max=10000)
-    review_heatmap(conn, "review_heatmap_02", review_min=10, review_scale="log")
-    release_calmap(conn, "release_calmap_01", range(2010, 2025 + 1))
-    release_calmap(conn, "release_calmap_02", merge_years=True)
-    revenue_distribution(conn, "revenue_distribution_01", revenue_scale="linear")
-    revenue_distribution(conn, "revenue_distribution_01_log", revenue_scale="log")
-    revenue_distribution(conn, "revenue_distribution_02", revenue_scale="linear", max_revenue=1000000)
-    revenue_distribution(conn, "revenue_distribution_03", revenue_scale="log", tag_whitelist=[1091588], subtitle="Tag = Roguelike Deckbuilder")
-    revenue_distribution(conn, "revenue_distribution_04", revenue_scale="log", tag_whitelist=[5432], subtitle="Tag = Programming")
+    #review_histogram(conn, "review_histogram")
+    #review_heatmap(conn, "review_heatmap_01", review_min=100, review_max=10000)
+    #review_heatmap(conn, "review_heatmap_02", review_min=10, review_scale="log")
+    #release_calmap(conn, "release_calmap_01", range(2010, 2025 + 1))
+    #release_calmap(conn, "release_calmap_02", merge_years=True)
+    #revenue_distribution(conn, "revenue_distribution_01", revenue_scale="linear")
+    #revenue_distribution(conn, "revenue_distribution_01_log", revenue_scale="log")
+    #revenue_distribution(conn, "revenue_distribution_02", revenue_scale="linear", max_revenue=1000000)
+    #revenue_distribution(conn, "revenue_distribution_03", revenue_scale="log", tag_whitelist=[1091588], subtitle="Tag = Roguelike Deckbuilder")
+    #revenue_distribution(conn, "revenue_distribution_04", revenue_scale="log", tag_whitelist=[5432], subtitle="Tag = Programming")
+    games_map(conn, "games_map")
 
     conn.close()
 
@@ -205,6 +209,78 @@ AND tags_filter(tagids, '{assemble_list(tag_whitelist)}', '{assemble_list(tag_bl
     plt.savefig(get_full_filename(filename), dpi=300)
 
 
+def games_map(conn, filename):
+    SIZE_MIN_MAX = [200, 1200]
+    query_condition = "WHERE appid < 100"
+    query1 = f"""
+WITH app_authors AS (
+    SELECT
+        appid,
+        (author).steamid AS steamid
+    FROM reviews
+    {query_condition}
+)
+SELECT
+    a1.appid AS appid_1,
+    a2.appid AS appid_2,
+    COUNT(*) AS weight
+FROM app_authors a1
+JOIN app_authors a2
+  ON a1.steamid = a2.steamid
+ AND a1.appid < a2.appid
+GROUP BY a1.appid, a2.appid
+HAVING COUNT(*) >= 5
+ORDER BY weight DESC;
+"""
+    query2 = f"""
+SELECT appid, name, (reviews).total_reviews
+FROM apps
+{query_condition};
+"""
+
+    print("read DB...")
+    df_weights = pd.read_sql(query1, conn)
+    df_apps = pd.read_sql(query2, conn)
+
+    print("render spring model...")
+    G = nx.Graph()
+    for _, row in df_weights.iterrows():
+        G.add_edge(row["appid_1"], row["appid_2"], weight=row["weight"])
+
+    app_lookup = df_apps.set_index("appid")[["name", "total_reviews"]].to_dict(orient="index")
+
+    # iterate over nodes in G
+    for node in G.nodes:
+        if node in app_lookup:
+            G.nodes[node]["name"] = app_lookup[node]["name"]
+            G.nodes[node]["total_reviews"] = app_lookup[node]["total_reviews"]
+
+    # Force-Directed Layout berechnen
+    pos = nx.spring_layout(G)  # <- Feder-Modell
+
+    node_sizes = [
+        max(G.nodes[node].get("total_reviews", 1), 1) for node in G.nodes
+    ]
+    print(node_sizes)
+    node_sizes = [np.log(size) for size in node_sizes]
+    sizes_min_max = [min(node_sizes), max(node_sizes)]
+    node_sizes = [remap(size, sizes_min_max, SIZE_MIN_MAX) for size in node_sizes]
+
+    print(node_sizes)
+
+    # Zeichnen mit matplotlib
+    nx.draw(
+        G, pos,
+        with_labels=True,
+        node_size=node_sizes,
+        labels=nx.get_node_attributes(G, "name"),
+        node_color="lightblue",
+        edge_color="gray"
+    )
+
+    plt.savefig(get_full_filename(filename), dpi=300)
+
+
 def connect_to_db():
     try:
         conn = psycopg2.connect(
@@ -247,5 +323,9 @@ def combine_subtitle(title, subtitle):
         return title
     else:
         return f"{title}\n({subtitle})"
+
+
+def remap(value, in_min_max, out_min_max):
+    return out_min_max[0] + (value - in_min_max[0]) * (out_min_max[1] - out_min_max[0]) / (in_min_max[1] - in_min_max[0])
 
 main()
