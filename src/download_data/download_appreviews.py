@@ -3,7 +3,7 @@ import os
 import sys
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 
 import pandas as pd
 import psycopg2
@@ -11,11 +11,12 @@ import requests
 from dotenv import load_dotenv
 from tqdm import tqdm
 
+from src import paths
+
 load_dotenv()
 
 # Settings
-ALL_APPS_PATH = "data/all_apps.csv"
-OUTPUT_DIR = "data/appreviews"
+OUTPUT_DIR = paths.REVIEWS_DIRECTORY
 MAX_REQUESTS = 15
 APPIDS = None
 URL = "https://store.steampowered.com/appreviews/"
@@ -38,7 +39,7 @@ def main():
     print(f"Fetching appreviews from: {URL}")
 
     if not APPIDS:
-        all_apps = pd.read_csv(ALL_APPS_PATH)
+        all_apps = pd.read_csv(paths.APP_LIST_PATH)
         total_reviews = get_total_reviews()
     else:
         all_apps = {"appid": APPIDS}

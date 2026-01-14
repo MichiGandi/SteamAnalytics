@@ -2,12 +2,12 @@ import pandas as pd
 import requests
 from dotenv import load_dotenv
 import os
+from src import paths
 
 load_dotenv()
 
 # Settings
-ALL_APPS_PATH = "data/all_apps.csv"
-OUTPUT_DIR = "data/appdetails"
+OUTPUT_DIR = paths.APPDETAILS_DIRECTORY
 URL = "https://store.steampowered.com/api/appdetails/APPID"
 params = {}
 
@@ -15,7 +15,7 @@ params = {}
 def main():
     print(f"Fetching appdetails from: {URL}")
 
-    all_apps = pd.read_csv(ALL_APPS_PATH)
+    all_apps = pd.read_csv(paths.ALL_APPS_PATH)
     print(f"Loaded {len(all_apps)} apps.")
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)

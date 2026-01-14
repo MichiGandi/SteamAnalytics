@@ -3,12 +3,12 @@ import requests
 from dotenv import load_dotenv
 import json
 import os
+from src import paths
 
 load_dotenv()
 
 # Settings
-ALL_APPS_PATH = "data/all_apps.csv"
-OUTPUT_DIR = "data/storebrowse_items"
+OUTPUT_DIR = paths.STOREBROWSE_ITEMS_DIRECTORY
 BATCH_SIZE = 100
 URL = "https://api.steampowered.com/IStoreBrowseService/GetItems/v1"
 params = {
@@ -41,7 +41,7 @@ params = {
 def main():
     print(f"Fetching appdetails from: {URL}")
 
-    all_apps = pd.read_csv(ALL_APPS_PATH)
+    all_apps = pd.read_csv(paths.ALL_APPS_PATH)
     print(f"Loaded {len(all_apps)} apps.")
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)

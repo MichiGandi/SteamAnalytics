@@ -1,17 +1,20 @@
 import pandas as pd
 import requests
 from dotenv import load_dotenv
-import json
 import os
+from src import paths
 
 load_dotenv()
 
+#Settings
+OUTPUT_PATH = paths.APP_LIST_PATH
+
+
 def main():
-    load_app_list()
-    load_tag_list()
+    download_app_list()
 
 
-def load_app_list():
+def download_app_list():
     url = "https://api.steampowered.com/IStoreService/GetAppList/v1/"
     params = {
         "key": os.getenv("STEAM_WEB_API_KEY"),
@@ -26,7 +29,6 @@ def load_app_list():
     params["last_appid"] = 0
     all_apps = []
 
-    max_requests = 20
     request_count = 0
     while True:
         request_count += 1
@@ -50,20 +52,8 @@ def load_app_list():
     df = pd.DataFrame(all_apps)
 
     os.makedirs("data", exist_ok=True)
-    df.to_csv("data/all_apps.csv", index=False)
+    df.to_csv(OUTPUT_PATH, index=False)
 
 
-def load_tag_list():
-    url = "https://api.steampowered.com/IStoreService/GetTagList/v1/"
-    params = {
-        "language": "english"
-    }
-
-    response = requests.get(url, params=params)
-    response.raise_for_status()
-
-    os.makedirs("data", exist_ok=True)
-    with open("data/steam_tags.json", "w", encoding="utf-8") as f:
-        json.dump(response.json(), f, indent=2)
-
-main()
+if __name__ == "__main__":
+    main()

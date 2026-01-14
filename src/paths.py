@@ -1,3 +1,6 @@
+APP_LIST_PATH = "data/apps.csv"
+TAG_LIST_PATH = "data/tags.json"
+APPDETAILS_DIRECTORY = "data/appdetails"
 STOREBROWSE_ITEMS_DIRECTORY = "data/storebrowse_items"
 REVIEWS_DIRECTORY = "data/appreviews"
 TAGS_FILE = "data/steam_tags.json"
