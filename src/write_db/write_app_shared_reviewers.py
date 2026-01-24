@@ -12,13 +12,13 @@ load_dotenv()
 def main():
     conn, cur = db_utility.connect_to_db()
 
-    appids, skipped_apps = get_appids(conn)
+    authorids, processed_authors = get_authorids(conn)
     
-    if skipped_apps > 0:
-        print(f"skipped {skipped_apps} apps, because they already got executed.")
+    if processed_authors > 0:
+        print(f"skipped {processed_authors} apps, because they already got executed.")
     
     create_processing_state_table(conn)
-    write_apps_shared_reviewers(conn, appids)
+    write_apps_shared_reviewers(conn, authorids)
     
     conn.commit()
     cur.close()
@@ -52,80 +52,83 @@ def write_apps_shared_reviewers(conn, appids):
             progress_bar.update(1)
             
 
-def write_app_shared_reviewers(conn, appid):
-    SQL = """
-WITH target_authors AS (
-    SELECT DISTINCT (author).steamid AS authorid
-    FROM reviews
-    WHERE appid = %s
-)
-INSERT INTO app_shared_reviewers (appid1, appid2, shared_review_count)
-SELECT
-    LEAST(%s, r.appid) AS appid1,
-    GREATEST(%s, r.appid) AS appid2,
-    COUNT(DISTINCT (r.author).steamid) AS shared_review_count
-FROM reviews r
-JOIN target_authors t
-  ON (r.author).steamid = t.authorid
-WHERE r.appid <> %s
-GROUP BY r.appid
-ON CONFLICT (appid1, appid2)
-DO UPDATE SET shared_review_count = EXCLUDED.shared_review_count;
-"""
-
+#def write_app_shared_reviewers(conn, appid):
+def write_app_shared_reviewers(conn, authorid):
     SQL_CHECK = """
-SELECT 1
-FROM app_shared_reviewers_processing_state
-WHERE processed_appid = %s;
-"""
+    SELECT 1
+    FROM author_processing_state
+    WHERE authorid = %s;
+    """
 
-    SQL_PROGRESS_STATE = """
-INSERT INTO app_shared_reviewers_processing_state(processed_appid)
-VALUES (%s)
-ON CONFLICT DO NOTHING;
-"""
+    SQL_AUTHOR_APPS = """
+    WITH author_apps AS (
+        SELECT DISTINCT appid
+        FROM reviews
+        WHERE (author).steamid = %s
+    )
+    INSERT INTO app_shared_reviewers (appid1, appid2, shared_review_count)
+    SELECT
+        LEAST(a.appid, b.appid) AS appid1,
+        GREATEST(a.appid, b.appid) AS appid2,
+        1 AS shared_review_count
+    FROM author_apps a
+    JOIN author_apps b
+      ON a.appid < b.appid
+    ON CONFLICT (appid1, appid2)
+    DO UPDATE
+    SET shared_review_count = app_shared_reviewers.shared_review_count + 1;
+    """
+
+    SQL_MARK_DONE = """
+    INSERT INTO author_processing_state (authorid)
+    VALUES (%s)
+    ON CONFLICT DO NOTHING;
+    """
 
     try:
         with conn.cursor() as cur:
-            cur.execute(SQL_CHECK, (appid,))
+            cur.execute(SQL_CHECK, (authorid,))
             if cur.fetchone() is not None:
                 return False
-            
-            cur.execute(SQL, (appid, appid, appid, appid))
-            cur.execute(SQL_PROGRESS_STATE, (appid,))
+
+            cur.execute(SQL_AUTHOR_APPS, (authorid,))
+            cur.execute(SQL_MARK_DONE, (authorid,))
         conn.commit()
         return True
-    
+
     except Exception as e:
         conn.rollback()
-        print(f"Error processing app {appid}: {e}")
+        print(f"Error processing author {authorid}: {e}")
         raise
 
 
-def get_appids(conn):
+def get_authorids(conn):
     SQL = """
-SELECT a.appid
-FROM apps a
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM app_shared_reviewers_processing_state p
-    WHERE p.processed_appid = a.appid
-)
-ORDER BY a.appid;
-"""
-    SQL_SKIPPED = """
-SELECT COUNT(*) AS processed_apps
-FROM app_shared_reviewers_processing_state;
-"""
+    SELECT DISTINCT (r.author).steamid
+    FROM reviews r
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM author_processing_state p
+        WHERE p.authorid = (r.author).steamid
+    )
+    ORDER BY (r.author).steamid;
+    """
+
+    SQL_PROCESSED = """
+    SELECT COUNT(*) 
+    FROM author_processing_state;
+    """
+
     with conn.cursor() as cur:
         cur.execute(SQL)
-        appids = [row[0] for row in cur.fetchall()]
-        
-        cur.execute(SQL_SKIPPED)
-        skipped_apps = cur.fetchone()[0]
-    
-    return (appids, skipped_apps)
-    
+        authorids = [row[0] for row in cur.fetchall()]
+
+        cur.execute(SQL_PROCESSED)
+        processed_authors = cur.fetchone()[0]
+
+    return authorids, processed_authors
+
+
 
 if __name__ == "__main__":
     main()
