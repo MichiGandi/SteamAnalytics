@@ -67,14 +67,9 @@ CREATE TABLE IF NOT EXISTS reviews (
 CREATE INDEX IF NOT EXISTS idx_reviews_appid
 ON reviews (appid);
 
-CREATE INDEX IF NOT EXISTS idx_reviews_author
+CREATE INDEX IF NOT EXISTS idx_reviews_authorid
 ON reviews ( ((author).steamid) );
 
---CREATE INDEX IF NOT EXISTS idx_reviews_author_appid
---ON reviews ( ((author).steamid), appid );
-
-CREATE TABLE IF NOT EXISTS author_processing_state (
-    authorid BIGINT PRIMARY KEY);
 
 CREATE TABLE IF NOT EXISTS app_shared_reviewers (
     appid1 INT,
@@ -85,9 +80,8 @@ CREATE TABLE IF NOT EXISTS app_shared_reviewers (
 
 
 CREATE TABLE IF NOT EXISTS app_shared_reviewers_processing_state (
-    processed_appid INT PRIMARY KEY
+    authorid BIGINT PRIMARY KEY
 );
-
 
 
 CREATE OR REPLACE VIEW apps_view AS

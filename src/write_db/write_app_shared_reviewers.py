@@ -12,10 +12,11 @@ load_dotenv()
 def main():
     conn, cur = db_utility.connect_to_db()
 
+    print("get all autorids...")
     authorids, processed_authors = get_authorids(conn)
     
     if processed_authors > 0:
-        print(f"skipped {processed_authors} apps, because they already got executed.")
+        print(f"skipping {processed_authors} authors, because they already got executed.")
     
     create_processing_state_table(conn)
     write_apps_shared_reviewers(conn, authorids)
@@ -23,13 +24,13 @@ def main():
     conn.commit()
     cur.close()
     conn.close()
-    print("All JSON files imported successfully!")
+    print("Finished.")
 
 
 def create_processing_state_table(conn):
     SQL = """
 CREATE TABLE IF NOT EXISTS app_shared_reviewers_processing_state (
-    processed_appid INT PRIMARY KEY
+    authorid BIGINT PRIMARY KEY
 );
 """
     with conn.cursor() as cur:
@@ -38,12 +39,15 @@ CREATE TABLE IF NOT EXISTS app_shared_reviewers_processing_state (
 
 
 def write_apps_shared_reviewers(conn, appids):
-     
-    
-    with tqdm(total=len(appids), desc="Processing apps") as progress_bar:
+    with tqdm(
+        total=len(appids),
+        desc="Processing authors",
+        ncols=100,
+        bar_format='{desc}{percentage:3.2f}%|{bar}{r_bar}'
+        ) as progress_bar:
         for appid in appids:
-            progress_bar.set_description(f"Processing app {appid}")
-            progress_bar.refresh()
+            progress_bar.set_description(f"Processing author {appid}")
+            #progress_bar.refresh()
             try:
                 write_app_shared_reviewers(conn, appid)
             except RuntimeError as e:
@@ -52,11 +56,10 @@ def write_apps_shared_reviewers(conn, appids):
             progress_bar.update(1)
             
 
-#def write_app_shared_reviewers(conn, appid):
 def write_app_shared_reviewers(conn, authorid):
     SQL_CHECK = """
     SELECT 1
-    FROM author_processing_state
+    FROM app_shared_reviewers_processing_state
     WHERE authorid = %s;
     """
 
@@ -80,7 +83,7 @@ def write_app_shared_reviewers(conn, authorid):
     """
 
     SQL_MARK_DONE = """
-    INSERT INTO author_processing_state (authorid)
+    INSERT INTO app_shared_reviewers_processing_state (authorid)
     VALUES (%s)
     ON CONFLICT DO NOTHING;
     """
@@ -108,7 +111,7 @@ def get_authorids(conn):
     FROM reviews r
     WHERE NOT EXISTS (
         SELECT 1
-        FROM author_processing_state p
+        FROM app_shared_reviewers_processing_state p
         WHERE p.authorid = (r.author).steamid
     )
     ORDER BY (r.author).steamid;
@@ -116,7 +119,7 @@ def get_authorids(conn):
 
     SQL_PROCESSED = """
     SELECT COUNT(*) 
-    FROM author_processing_state;
+    FROM app_shared_reviewers_processing_state;
     """
 
     with conn.cursor() as cur:
@@ -127,7 +130,6 @@ def get_authorids(conn):
         processed_authors = cur.fetchone()[0]
 
     return authorids, processed_authors
-
 
 
 if __name__ == "__main__":
