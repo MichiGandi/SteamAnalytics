@@ -1,21 +1,28 @@
 import os
+from contextlib import contextmanager
+
 import psycopg2
+from dotenv import load_dotenv
 
 
+@contextmanager
 def connect_to_db():
+    """Context manager for PostgreSQL connection."""
+    load_dotenv()
     try:
         conn = psycopg2.connect(
             dbname="SteamAnalytics",
             user=os.getenv("DB_USER"),
             password=os.getenv("DB_PASSWORD"),
             host="localhost",
-            port=5432
-        )
-        cur = conn.cursor()
-        return conn, cur
-    except:
-        print("failed to connect to DB.")
-        raise
+            port=5432)
+        try:
+            yield conn
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"Failed to connect to DB.\n{e}")
+        raise e
     
 
 def assemble_list(items, composite=False):

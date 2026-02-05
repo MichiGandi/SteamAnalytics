@@ -1,10 +1,9 @@
+import os
+
 import pandas as pd
 import requests
-from dotenv import load_dotenv
-import os
-from src import paths
 
-load_dotenv()
+from src import paths
 
 # Settings
 OUTPUT_DIR = paths.APPDETAILS_DIRECTORY

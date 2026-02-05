@@ -1,11 +1,10 @@
-import pandas as pd
-import requests
-from dotenv import load_dotenv
 import json
 import os
-from src import paths
 
-load_dotenv()
+import pandas as pd
+import requests
+
+from src import paths
 
 # Settings
 OUTPUT_DIR = paths.STOREBROWSE_ITEMS_DIRECTORY
@@ -41,7 +40,7 @@ params = {
 def main():
     print(f"Fetching appdetails from: {URL}")
 
-    all_apps = pd.read_csv(paths.ALL_APPS_PATH)
+    all_apps = pd.read_csv(paths.APP_LIST_PATH)
     print(f"Loaded {len(all_apps)} apps.")
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)

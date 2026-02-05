@@ -1,16 +1,17 @@
+import os
+
 import pandas as pd
 import requests
 from dotenv import load_dotenv
-import os
-from src import paths
 
-load_dotenv()
+from src import paths
 
 #Settings
 OUTPUT_PATH = paths.APP_LIST_PATH
 
 
 def main():
+    load_dotenv()
     download_app_list()
 
 

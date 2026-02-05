@@ -1,39 +1,34 @@
 import json
-from decimal import Decimal
-from datetime import datetime
-from dotenv import load_dotenv
 import os
+from datetime import datetime
+from decimal import Decimal
+
 from tqdm import tqdm
-from src import db_utility
-from src import paths
+
+from src import db_utility, paths
 
 
 def main():
-    load_dotenv()
-    conn, cur = db_utility.connect_to_db()
-    
-    write_apps(cur, conn)
-
-    conn.commit()
-    cur.close()
-    conn.close()
+    with db_utility.connect_to_db() as conn:
+        write_apps(conn)
     print("All apps written successfully!")
 
 
-def write_apps(cur, conn):
+def write_apps(conn):
     json_files = [f for f in os.listdir(paths.STOREBROWSE_ITEMS_DIRECTORY) if f.endswith(".json")]
     print(len(json_files))
+    
     for filename in tqdm(json_files, desc="Processing Apps"):
         filepath = os.path.join(paths.STOREBROWSE_ITEMS_DIRECTORY, filename)
         with open(filepath, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        for item in data["response"]["store_items"]:
-            write_app(item, cur)
-            conn.commit()
+        with conn:
+            for item in data["response"]["store_items"]:
+                write_app(conn, item)
 
 
-def write_app(item, cur):
+def write_app(conn, item):
     appid = item["appid"]
     name = item["name"]
     # Reviews (taking summary_filtered)
@@ -83,18 +78,19 @@ SET
     developers = EXCLUDED.developers,
     price = EXCLUDED.price;
 """
-    cur.execute(SQL, (
-        appid,
-        name,
-        total_reviews,
-        percent_positive,
-        review_score,
-        release_date,
-        tag_array_str,
-        publishers_array_str,
-        developers_array_str,
-        price
-    ))
+    with conn.cursor() as cur:
+        cur.execute(SQL, (
+            appid,
+            name,
+            total_reviews,
+            percent_positive,
+            review_score,
+            release_date,
+            tag_array_str,
+            publishers_array_str,
+            developers_array_str,
+            price
+        ))
 
 
 def assemble_list(items, composite=False):

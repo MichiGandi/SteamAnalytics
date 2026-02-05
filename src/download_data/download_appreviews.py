@@ -6,14 +6,11 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 import pandas as pd
-import psycopg2
 import requests
-from dotenv import load_dotenv
 from tqdm import tqdm
 
-from src import paths
+from src import db_utility, paths
 
-load_dotenv()
 
 # Settings
 OUTPUT_DIR = paths.REVIEWS_DIRECTORY
@@ -28,6 +25,7 @@ PARAMS = {
         "num_per_page": 100,
     }
 MAX_REQUEST_ATTEMPTS = 100
+
 
 # globals
 stop_event = threading.Event()
@@ -151,37 +149,22 @@ def fetch_and_save(appid):
 
 
 def get_total_reviews(appids: list[int] | None = None):
-    conn = connect_to_db()
-    with conn.cursor() as cur:
-        if appids is None:
-            cur.execute("""
-                SELECT SUM((reviews).total_reviews)
-                FROM apps;
-            """)
-        else:
-            cur.execute("""
-                SELECT SUM((reviews).total_reviews)
-                FROM apps
-                WHERE appid = ANY(%s);
-            """, (appids,))
-        total_reviews = cur.fetchone()[0]
-    conn.close()
+    with db_utility.connect_to_db() as conn:
+        with conn:
+            with conn.cursor() as cur:
+                if appids is None:
+                    cur.execute("""
+                        SELECT SUM((reviews).total_reviews)
+                        FROM apps;
+                    """)
+                else:
+                    cur.execute("""
+                        SELECT SUM((reviews).total_reviews)
+                        FROM apps
+                        WHERE appid = ANY(%s);
+                    """, (appids,))
+                total_reviews = cur.fetchone()[0]
     return total_reviews
-
-
-def connect_to_db():
-    try:
-        conn = psycopg2.connect(
-            dbname="SteamAnalytics",
-            user=os.getenv("DB_USER"),
-            password=os.getenv("DB_PASSWORD"),
-            host="localhost",
-            port=5432
-        )
-        return conn
-    except:
-        print("failed to connect to DB.")
-        raise
 
 
 if __name__ == "__main__":

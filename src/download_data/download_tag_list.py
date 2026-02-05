@@ -1,11 +1,10 @@
-import pandas as pd
-import requests
-from dotenv import load_dotenv
 import json
 import os
-from src import paths
 
-load_dotenv()
+import pandas as pd
+import requests
+
+from src import paths
 
 #Settings
 OUTPUT_PATH = paths.TAG_LIST_PATH

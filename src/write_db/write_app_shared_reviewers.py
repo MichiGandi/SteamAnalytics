@@ -1,36 +1,28 @@
-from dotenv import load_dotenv
 from tqdm import tqdm
 
 from src import db_utility
 
-load_dotenv()
-
 
 def main():
-    conn, cur = db_utility.connect_to_db()
-
     try:
-        with tqdm(total=1, desc="1/3: Creating stage table", unit="step") as pbar:
-            create_app_shared_reviewers_stage(conn)
-            pbar.update(1)
-        
-        with tqdm(total=1, desc="2/3: Copying to main table", unit="step") as pbar:
-            copy_to_app_shared_reviewers(conn)
-            pbar.update(1)
-        
-        with tqdm(total=1, desc="3/3: Dropping stage table", unit="step") as pbar:
-            drop_app_shared_reviewers_stage(conn)
-            pbar.update(1)
+        with db_utility.connect_to_db() as conn:
+            with tqdm(total=1, desc="1/3: Creating stage table", unit="step") as pbar:
+                create_app_shared_reviewers_stage(conn)
+                pbar.update(1)
+            
+            with tqdm(total=1, desc="2/3: Copying to main table", unit="step") as pbar:
+                copy_to_app_shared_reviewers(conn)
+                pbar.update(1)
+            
+            with tqdm(total=1, desc="3/3: Dropping stage table", unit="step") as pbar:
+                drop_app_shared_reviewers_stage(conn)
+                pbar.update(1)
     
     except ValueError as e:
         print(f"{e}")
     
     else:
         print("Calculated app shared reviewers successfully.")
-    
-    finally:
-        cur.close()
-        conn.close()
 
 
 def create_app_shared_reviewers_stage(conn):
