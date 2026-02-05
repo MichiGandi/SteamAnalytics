@@ -63,6 +63,20 @@ CREATE TABLE IF NOT EXISTS reviews (
     primarily_steam_deck BOOLEAN
 );
 
+CREATE INDEX IF NOT EXISTS idx_reviews_appid
+ON reviews (appid);
+
+CREATE INDEX IF NOT EXISTS idx_reviews_authorid
+ON reviews ( ((author).steamid) );
+
+
+CREATE TABLE IF NOT EXISTS app_shared_reviewers (
+    appid1 INT,
+    appid2 INT,
+    shared_review_count INT,
+    PRIMARY KEY (appid1, appid2)
+);
+
 
 CREATE OR REPLACE VIEW apps_view AS
 SELECT
