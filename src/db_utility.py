@@ -40,4 +40,6 @@ def assemble_list(items, composite=False):
         return "{}"
     if composite:
         items = [f'"{item}"' for item in items]
+    else:
+        items = [str(item) for item in items]
     return "{" + ",".join(items) + "}"
