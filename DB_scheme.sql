@@ -99,8 +99,45 @@ FROM apps a;
 CREATE OR REPLACE VIEW app_shared_reviewers_view AS
 SELECT
   a.*,
-  ((a.shared_reviewers::float) / ((a.reviews1 + a.reviews2 - a.shared_reviewers)::float)) AS jaccard
+  -- Jaccard Index: intersection / union
+  ((a.shared_reviewers::float) / ((a.reviews1 + a.reviews2 - a.shared_reviewers)::float))
+    AS jaccard,
+  -- Dice Coefficient: 2*intersection / (|A| + |B|)
+  ((2.0 * a.shared_reviewers::float) / ((a.reviews1 + a.reviews2)::float))
+    AS dice,
+  -- Overlap Coefficient: intersection / min(|A|, |B|)
+  ((a.shared_reviewers::float) / (LEAST(a.reviews1, a.reviews2)::float))
+    AS overlap,
+  -- Cosine Similarity: intersection / sqrt(|A| * |B|)
+  ((a.shared_reviewers::float) / NULLIF(sqrt(a.reviews1::float * a.reviews2::float), 0))
+    AS cosine
 FROM app_shared_reviewers a;
+
+
+DROP VIEW games_map_nodes_gephi_view;
+CREATE OR REPLACE VIEW games_map_nodes_gephi_view AS
+SELECT
+  appid AS "id",
+  name  AS "label",
+  LOG(1.1, 1 + (reviews).total_reviews)::float AS "size"
+FROM apps
+WHERE appid < 500000
+ORDER BY appid;
+--gephi: SELECT * FROM games_map_nodes_gephi_view;
+
+CREATE OR REPLACE VIEW games_map_edges_gephi_view AS
+SELECT
+  appid1  AS "source",
+  appid2  AS "target",
+  jaccard AS "weight"
+--  overlap AS "weight"
+FROM app_shared_reviewers_view
+WHERE jaccard > 0.1
+--WHERE overlap > 0.2
+AND appid1 < 500000
+AND appid2 < 500000
+ORDER BY appid1, appid2;
+--gephi: SELECT * FROM games_map_edges_gephi_view;
 
 
 -- Functions
