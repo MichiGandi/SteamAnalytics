@@ -30,19 +30,28 @@ def create_app_shared_reviewers_stage(conn):
 CREATE UNLOGGED TABLE app_shared_reviewers_stage AS
 WITH a AS (
     SELECT DISTINCT
-        (author).steamid AS authorid,
+        (author).steamid AS steamid,
         appid
     FROM reviews
+),
+rc AS (
+    SELECT appid, COUNT(*) AS review_count
+    FROM reviews
+    GROUP BY appid
 )
 SELECT
-    LEAST(a1.appid, a2.appid) AS appid1,
+    LEAST(a1.appid, a2.appid)    AS appid1,
     GREATEST(a1.appid, a2.appid) AS appid2,
-    COUNT(*) AS shared_review_count
+    rc1.review_count             AS reviews1,
+    rc2.review_count             AS reviews2,
+    COUNT(*)                     AS shared_reviewers
 FROM a a1
 JOIN a a2
-  ON a1.authorid = a2.authorid
+  ON a1.steamid = a2.steamid
  AND a1.appid < a2.appid
-GROUP BY appid1, appid2;
+JOIN rc rc1 ON rc1.appid = LEAST(a1.appid, a2.appid)
+JOIN rc rc2 ON rc2.appid = GREATEST(a1.appid, a2.appid)
+GROUP BY appid1, appid2, reviews1, reviews2;
 """
     with conn:
         with conn.cursor() as cur:
@@ -51,6 +60,15 @@ GROUP BY appid1, appid2;
 
 def copy_to_app_shared_reviewers(conn):
     SQL = """
+CREATE TABLE IF NOT EXISTS app_shared_reviewers (
+    appid1 INT,
+    appid2 INT,
+    reviews1 INT,
+    reviews2 INT,
+    shared_reviewers INT,
+    PRIMARY KEY (appid1, appid2)
+);
+
 SET LOCAL synchronous_commit = OFF;
 
 INSERT INTO app_shared_reviewers

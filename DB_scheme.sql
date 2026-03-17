@@ -1,3 +1,4 @@
+-- Types
 CREATE TYPE review_summary AS (
     total_reviews INT,
     percent_positive INT,
@@ -28,6 +29,7 @@ CREATE TYPE review_author AS (
 );
 
 
+-- Tables (and Indexes)
 CREATE TABLE IF NOT EXISTS apps (
     appid INT PRIMARY KEY,
     name TEXT,
@@ -73,11 +75,14 @@ ON reviews ( ((author).steamid) );
 CREATE TABLE IF NOT EXISTS app_shared_reviewers (
     appid1 INT,
     appid2 INT,
-    shared_review_count INT,
+    reviews1 INT,
+    reviews2 INT,
+    shared_reviewers INT,
     PRIMARY KEY (appid1, appid2)
 );
 
 
+-- Views
 CREATE OR REPLACE VIEW apps_view AS
 SELECT
     a.*,
@@ -91,7 +96,14 @@ SELECT
     ) AS tagnames
 FROM apps a;
 
+CREATE OR REPLACE VIEW app_shared_reviewers_view AS
+SELECT
+  a.*,
+  ((a.shared_reviewers::float) / ((a.reviews1 + a.reviews2 - a.shared_reviewers)::float)) AS jaccard
+FROM app_shared_reviewers a;
 
+
+-- Functions
 CREATE OR REPLACE FUNCTION tags_filter(
     tagids weighted_tagid[],
     whitelist int[],
